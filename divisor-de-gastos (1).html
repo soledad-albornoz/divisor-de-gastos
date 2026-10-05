@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cuentas claras – Divisor de gastos</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef3f0;--card:#fff;--ink:#12302a;--mute:#5c726b;--line:#d5e0db;--acc:#0f6b5c;--accink:#fff;--pos:#0f6b5c;--neg:#b4412b;--hl:#f3c94a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1b18;--card:#162824;--ink:#e6f1ed;--mute:#9bb2aa;--line:#2a403a;--acc:#4fc3a8;--accink:#06201a;--pos:#4fc3a8;--neg:#ff8a6e}}
+:root[data-theme="dark"]{--bg:#0e1b18;--card:#162824;--ink:#e6f1ed;--mute:#9bb2aa;--line:#2a403a;--acc:#4fc3a8;--accink:#06201a;--pos:#4fc3a8;--neg:#ff8a6e}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:2rem;font-weight:800;margin:0 0 2px;letter-spacing:-.02em}
+.sub{color:var(--mute);margin:0 0 20px}
+section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+h2{font-size:1.05rem;margin:0 0 10px;font-weight:700}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+input{flex:1}
+button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 16px;background:var(--acc);color:var(--accink);cursor:pointer}
+button.ghost{background:transparent;color:var(--mute);border:1px solid var(--line);font-weight:500}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--hl);outline-offset:1px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:4px 6px 4px 12px}
+.chip button{padding:0 8px;background:none;color:var(--mute);font-size:1.1rem;line-height:1.4}
+.who{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.who label{display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:5px 12px;cursor:pointer}
+.ex{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.ex:first-of-type{border-top:0}
+.ex small{color:var(--mute);display:block}
+.amt{font-weight:700;white-space:nowrap}
+.bal{display:flex;justify-content:space-between;padding:6px 0}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+.pay{background:var(--bg);border-left:4px solid var(--hl);border-radius:8px;padding:10px 12px;margin:8px 0}
+.tot{font-size:1.6rem;font-weight:800}
+.empty{color:var(--mute);margin:4px 0}
+.x{background:none;color:var(--mute);padding:0 6px;font-size:1.2rem}
+</style>
+</head>
+<body>
+<main>
+<h1>Cuentas claras</h1>
+<p class="sub">Cargá quién pagó qué y te decimos quién le debe a quién.</p>
+
+<section>
+  <h2>1. ¿Quiénes son?</h2>
+  <div class="row"><input id="pn" placeholder="Nombre (ej: Lucía)" aria-label="Nombre"><button id="addP">Agregar</button></div>
+  <div class="chips" id="people"></div>
+</section>
+
+<section>
+  <h2>2. Cargá un gasto</h2>
+  <div class="row"><input id="ed" placeholder="Qué fue (ej: Asado)" aria-label="Descripción"><input id="ea" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Monto" aria-label="Monto" style="max-width:130px"></div>
+  <div class="row" style="margin-top:8px;align-items:center"><span>Pagó</span><select id="ep" aria-label="Quién pagó"></select></div>
+  <div class="who" id="split" aria-label="Se divide entre"></div>
+  <button id="addE">Guardar gasto</button>
+  <p class="empty" id="err" role="alert" style="color:var(--neg)"></p>
+</section>
+
+<section>
+  <h2>Gastos</h2>
+  <div id="exs"></div>
+</section>
+
+<section>
+  <h2>3. Resultado</h2>
+  <div class="tot" id="tot">$ 0</div>
+  <div id="bals" style="margin:8px 0 12px"></div>
+  <div id="pays"></div>
+  <div class="row" style="margin-top:12px"><button id="copy">Copiar resumen</button><button class="ghost" id="reset">Empezar de cero</button></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>'$ '+n.toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:2});
+let S={people:[],exs:[],nid:1};
+try{const r=localStorage.getItem('cc');if(r)S=JSON.parse(r)}catch(e){}
+const save=()=>{try{localStorage.setItem('cc',JSON.stringify(S))}catch(e){}};
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const name=id=>(S.people.find(p=>p.id===id)||{n:'?'}).n;
+
+function calc(){
+  const b={};S.people.forEach(p=>b[p.id]=0);let total=0;
+  S.exs.forEach(e=>{total+=e.a;if(b[e.p]!==undefined)b[e.p]+=e.a;
+    const sh=e.s.filter(i=>b[i]!==undefined);sh.forEach(i=>b[i]-=e.a/sh.length)});
+  const cr=[],de=[];
+  Object.entries(b).forEach(([id,v])=>{v=Math.round(v*100)/100;if(v>0.009)cr.push({id:+id,v});else if(v<-0.009)de.push({id:+id,v:-v})});
+  cr.sort((x,y)=>y.v-x.v);de.sort((x,y)=>y.v-x.v);
+  const pays=[];let i=0,j=0;
+  while(i<de.length&&j<cr.length){const m=Math.min(de[i].v,cr[j].v);pays.push({f:de[i].id,t:cr[j].id,v:m});
+    de[i].v-=m;cr[j].v-=m;if(de[i].v<0.01)i++;if(cr[j].v<0.01)j++}
+  return{b,total,pays};
+}
+
+function render(){
+  $('people').innerHTML=S.people.length?S.people.map(p=>`<span class="chip">${esc(p.n)}<button aria-label="Quitar ${esc(p.n)}" data-rp="${p.id}">×</button></span>`).join(''):'<p class="empty">Agregá al menos 2 personas para empezar.</p>';
+  $('ep').innerHTML=S.people.map(p=>`<option value="${p.id}">${esc(p.n)}</option>`).join('');
+  $('split').innerHTML=S.people.length?'<span style="width:100%;color:var(--mute)">Se divide entre</span>'+S.people.map(p=>`<label><input type="checkbox" value="${p.id}" checked style="flex:none">${esc(p.n)}</label>`).join(''):'';
+  $('exs').innerHTML=S.exs.length?S.exs.map(e=>`<div class="ex"><div>${esc(e.d)}<small>Pagó ${esc(name(e.p))} · entre ${e.s.length}</small></div><div class="amt">${fmt(e.a)} <button class="x" aria-label="Borrar gasto" data-re="${e.id}">×</button></div></div>`).join(''):'<p class="empty">Todavía no cargaste gastos.</p>';
+  const c=calc();$('tot').textContent='Total: '+fmt(c.total);
+  $('bals').innerHTML=S.people.map(p=>{const v=Math.round(c.b[p.id]*100)/100;
+    return `<div class="bal"><span>${esc(p.n)}</span><span class="${v>=0?'pos':'neg'}">${v>0?'recibe '+fmt(v):v<0?'debe '+fmt(-v):'está al día'}</span></div>`}).join('');
+  $('pays').innerHTML=c.pays.length?c.pays.map(p=>`<div class="pay"><b>${esc(name(p.f))}</b> le paga <b>${fmt(p.v)}</b> a <b>${esc(name(p.t))}</b></div>`).join(''):(S.exs.length?'<p class="empty">Todos están a mano.</p>':'');
+  save();
+}
+
+$('addP').onclick=()=>{const n=$('pn').value.trim();if(!n)return;S.people.push({id:S.nid++,n});$('pn').value='';render();$('pn').focus()};
+$('pn').onkeydown=e=>{if(e.key==='Enter')$('addP').click()};
+$('addE').onclick=()=>{
+  const d=$('ed').value.trim()||'Gasto',a=parseFloat($('ea').value),p=+$('ep').value;
+  const s=[...document.querySelectorAll('#split input:checked')].map(x=>+x.value);
+  $('err').textContent='';
+  if(S.people.length<2){$('err').textContent='Primero agregá al menos 2 personas.';return}
+  if(!(a>0)){$('err').textContent='Ingresá un monto mayor a 0.';return}
+  if(!s.length){$('err').textContent='Elegí entre quiénes se divide.';return}
+  S.exs.push({id:S.nid++,d,a,p,s});$('ed').value='';$('ea').value='';render();
+};
+document.body.addEventListener('click',e=>{
+  const rp=e.target.dataset.rp,re=e.target.dataset.re;
+  if(rp){S.people=S.people.filter(p=>p.id!==+rp);S.exs=S.exs.filter(x=>x.p!==+rp);S.exs.forEach(x=>x.s=x.s.filter(i=>i!==+rp));S.exs=S.exs.filter(x=>x.s.length);render()}
+  if(re){S.exs=S.exs.filter(x=>x.id!==+re);render()}
+});
+$('copy').onclick=()=>{
+  const c=calc();const t='Cuentas claras – Total '+fmt(c.total)+'\n'+(c.pays.map(p=>`• ${name(p.f)} le paga ${fmt(p.v)} a ${name(p.t)}`).join('\n')||'Todos a mano');
+  const done=()=>{$('copy').textContent='Copiado';setTimeout(()=>$('copy').textContent='Copiar resumen',1500)};
+  try{navigator.clipboard.writeText(t).then(done,()=>prompt('Copiá el resumen:',t))}catch(e){prompt('Copiá el resumen:',t)}
+};
+$('reset').onclick=()=>{if(confirm('¿Borrar personas y gastos?')){S={people:[],exs:[],nid:1};render()}};
+render();
+</script>
+</body>
+</html>
